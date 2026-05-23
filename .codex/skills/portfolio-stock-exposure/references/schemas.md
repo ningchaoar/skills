@@ -42,6 +42,38 @@
 
 仓位权重默认按当前市值计算。成本字段只用于展示和说明。
 
+## 单一临时查询文件
+
+本技能只维护一个运行时临时文件：
+
+```text
+.codex/skills/portfolio-stock-exposure/tmp/latest_query.json
+```
+
+每次查询前覆盖旧内容。脚本默认从该文件读取输入，并把查询结果写回同一个文件。
+
+```json
+{
+  "current_positions": [
+    {
+      "instrument_type": "fund",
+      "name": "创业板300ETF天弘",
+      "symbol": "159836",
+      "market_value": 128640
+    }
+  ],
+  "fund_codes": ["159836", "515050"],
+  "fund_components": {},
+  "fund_component_query": {
+    "provider": "eastmoney_tiantian_fund",
+    "queried_at": "2026-05-23T12:00:00+00:00",
+    "year": "2026"
+  }
+}
+```
+
+`fund_codes` 可以省略；`scripts/fund_components.py` 会从 `current_positions` 中筛选 `instrument_type == "fund"` 的 `symbol`。
+
 ## 基金成分股
 
 ```json

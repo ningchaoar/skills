@@ -47,6 +47,25 @@ JSON 结构和示例见 `references/schemas.md`。
 
 如果用户没有在本次请求中提供持仓明细，但要求分析或调仓，先请用户上传截图或粘贴当前持仓。
 
+把本次查询状态写入单一临时文件：
+
+```text
+.codex/skills/portfolio-stock-exposure/tmp/latest_query.json
+```
+
+只维护这一个临时文件。每次新查询都覆盖旧内容。需要运行脚本时，脚本默认从这个文件读取输入，并把查询结果写回同一个文件。
+
+写入本次持仓输入：
+
+```python
+from query_state import write_latest_query
+
+write_latest_query({
+    "current_positions": current_positions,
+    "fund_codes": ["159836", "515050"]
+})
+```
+
 ## 基金成分股
 
 在做股票维度穿透计算之前，先获取基金成分股及其权重。优先使用官方或一手来源。每组基金成分股都必须记录 `source` 和 `disclosure_date`。
@@ -57,6 +76,20 @@ JSON 结构和示例见 `references/schemas.md`。
 - 非股票部分：现金、债券、未映射部分要保留为单独 bucket，不要强行摊到股票里。
 
 获取或解释基金成分股前，先阅读 `references/data-source-policy.md`。
+
+已脚本化的默认查询路径：
+
+```bash
+python scripts/fund_components.py
+```
+
+该脚本默认读取 `tmp/latest_query.json` 中的 `fund_codes` 或 `current_positions`，通过东方财富/天天基金公开页面查询基金股票持仓，并把 `fund_components` 写回同一个临时文件。也可以直接指定基金代码：
+
+```bash
+python scripts/fund_components.py --fund-codes 159836 515050 --year 2025
+```
+
+如果网络不可用、页面结构变化、或基金没有公开股票持仓，脚本失败后不要猜测；把该基金作为未知基金敞口处理。
 
 ## 计算流程
 

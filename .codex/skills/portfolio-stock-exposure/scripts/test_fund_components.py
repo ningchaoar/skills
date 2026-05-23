@@ -1,0 +1,103 @@
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from fund_components import parse_eastmoney_holdings, update_latest_query_with_fund_components
+from query_state import read_latest_query, write_latest_query
+
+
+class FundComponentsTests(unittest.TestCase):
+    def test_parse_eastmoney_holdings_uses_latest_quarter(self):
+        html = """
+        <table>
+          <tr><th>序号</th><th>股票代码</th><th>股票名称</th><th>占净值比例</th><th>持股数</th><th>持仓市值</th><th>季度</th></tr>
+          <tr><td>1</td><td>300750</td><td>宁德时代</td><td>8.20%</td><td>20.00</td><td>3900.00</td><td>2024年4季度</td></tr>
+          <tr><td>2</td><td>300059</td><td>东方财富</td><td>5.10%</td><td>100.00</td><td>1300.00</td><td>2024年4季度</td></tr>
+          <tr><td>1</td><td>300014</td><td>亿纬锂能</td><td>4.50%</td><td>30.00</td><td>1000.00</td><td>2024年3季度</td></tr>
+        </table>
+        """
+
+        result = parse_eastmoney_holdings(html, fund_code="159836", source_url="https://example.test")
+
+        self.assertEqual(result["source"], "东方财富-天天基金")
+        self.assertEqual(result["source_url"], "https://example.test")
+        self.assertEqual(result["disclosure_date"], "2024年4季度")
+        self.assertEqual(
+            result["components"],
+            [
+                {
+                    "symbol": "300750",
+                    "name": "宁德时代",
+                    "weight": 0.082,
+                    "raw_weight_percent": 8.2,
+                    "quarter": "2024年4季度",
+                    "shares_10k": 20.0,
+                    "market_value_10k": 3900.0,
+                },
+                {
+                    "symbol": "300059",
+                    "name": "东方财富",
+                    "weight": 0.051,
+                    "raw_weight_percent": 5.1,
+                    "quarter": "2024年4季度",
+                    "shares_10k": 100.0,
+                    "market_value_10k": 1300.0,
+                },
+            ],
+        )
+
+    def test_parse_eastmoney_real_page_shape_with_news_column_and_header_date(self):
+        html = """
+        var apidata={ content:"<div class='box'><h4 class='t'><label>创业板300ETF天弘&nbsp;&nbsp;2025年4季度股票投资明细</label><label>截止至：<font>2025-12-31</font></label></h4>
+        <table><thead><tr><th>序号</th><th>股票代码</th><th>股票名称</th><th>相关资讯</th><th>占净值<br />比例</th><th>持股数<br />（万股）</th><th>持仓市值<br />（万元）</th></tr></thead>
+        <tbody><tr><td>1</td><td><a>300750</a></td><td><a>宁德时代</a></td><td><a>股吧</a><a>行情</a></td><td>13.25%</td><td>5.25</td><td>1050.00</td></tr></tbody></table></div>"};
+        """
+
+        result = parse_eastmoney_holdings(html, fund_code="159836", source_url="https://example.test")
+
+        self.assertEqual(result["disclosure_date"], "2025-12-31")
+        self.assertEqual(result["components"][0]["symbol"], "300750")
+        self.assertEqual(result["components"][0]["name"], "宁德时代")
+        self.assertEqual(result["components"][0]["weight"], 0.1325)
+        self.assertEqual(result["components"][0]["quarter"], "2025-12-31")
+        self.assertEqual(result["components"][0]["shares_10k"], 5.25)
+        self.assertEqual(result["components"][0]["market_value_10k"], 1050.0)
+
+    def test_update_latest_query_writes_components_back_to_same_file(self):
+        query_file = Path(__file__).parent / ".tmp-latest-query.json"
+        self.addCleanup(lambda: query_file.unlink() if query_file.exists() else None)
+        write_latest_query(
+            {
+                "current_positions": [
+                    {
+                        "instrument_type": "fund",
+                        "symbol": "159836",
+                        "name": "创业板300ETF天弘",
+                        "market_value": 100000,
+                    }
+                ]
+            },
+            query_file,
+        )
+
+        with patch(
+            "fund_components.fetch_fund_components",
+            return_value={
+                "159836": {
+                    "source": "fixture",
+                    "disclosure_date": "2024年4季度",
+                    "components": [{"symbol": "300750", "name": "宁德时代", "weight": 0.08}],
+                }
+            },
+        ):
+            updated = update_latest_query_with_fund_components(query_file, year="2024")
+
+        self.assertEqual(updated, read_latest_query(query_file))
+        self.assertIn("fund_components", updated)
+        self.assertEqual(updated["fund_components"]["159836"]["components"][0]["symbol"], "300750")
+        self.assertEqual(updated["fund_component_query"]["provider"], "eastmoney_tiantian_fund")
+        self.assertEqual(updated["fund_component_query"]["year"], "2024")
+
+
+if __name__ == "__main__":
+    unittest.main()
