@@ -1,31 +1,43 @@
 # 示例
 
+本文件的基金成分股权重是测试夹具，用于说明计算流程；不要把示例权重当成最新真实成分股。真实执行时必须用 `scripts/fund_components.py` 查询并写回 `tmp/latest_query.json`。
+
 ## 持仓分析
 
-输入：
+用户输入示例：
 
-- A基金市值 500000
-- 股票b 市值 500000
-- A基金成分股：股票a 70%，股票b 20%，股票c 10%
+```text
+我持有创业板300ETF天弘（159836）500000 元，宁德时代（300750）500000 元。
+```
 
-Python：
+内部计算输入：
 
 ```python
 from portfolio_math import compute_stock_exposure, normalize_positions
 
 positions = normalize_positions([
-    {"instrument_type": "fund", "name": "A基金", "symbol": "FUND_A", "market_value": 500000},
-    {"instrument_type": "stock", "name": "股票b", "symbol": "STOCK_B", "market_value": 500000},
+    {
+        "instrument_type": "fund",
+        "name": "创业板300ETF天弘",
+        "symbol": "159836",
+        "market_value": 500000,
+    },
+    {
+        "instrument_type": "stock",
+        "name": "宁德时代",
+        "symbol": "300750",
+        "market_value": 500000,
+    },
 ])
 
 fund_components = {
-    "FUND_A": {
-        "source": "示例数据",
+    "159836": {
+        "source": "测试夹具",
         "disclosure_date": "2026-03-31",
         "components": [
-            {"symbol": "STOCK_A", "name": "股票a", "weight": 0.7},
-            {"symbol": "STOCK_B", "name": "股票b", "weight": 0.2},
-            {"symbol": "STOCK_C", "name": "股票c", "weight": 0.1},
+            {"symbol": "300750", "name": "宁德时代", "weight": 0.7},
+            {"symbol": "300059", "name": "东方财富", "weight": 0.2},
+            {"symbol": "300014", "name": "亿纬锂能", "weight": 0.1},
         ],
     }
 }
@@ -33,40 +45,104 @@ fund_components = {
 exposure = compute_stock_exposure(positions, fund_components)
 ```
 
-预期股票维度穿透持仓：
+最终回答只输出数据：
 
-- 股票a：350000，35%
-- 股票b：600000，60%
-- 股票c：50000，5%
+```text
+总市值：1000000.00
+
+| 代码 | 名称 | 股票维度市值 | 占比 | 来源 | 披露日期 |
+|---|---:|---:|---:|---|---|
+| 300750 | 宁德时代 | 850000.00 | 85.00% | 直接持股 + 基金穿透 | 2026-03-31 |
+| 300059 | 东方财富 | 100000.00 | 10.00% | 基金穿透 | 2026-03-31 |
+| 300014 | 亿纬锂能 | 50000.00 | 5.00% | 基金穿透 | 2026-03-31 |
+```
+
+不要在最终回答中解释公式或评价持仓。
 
 ## 直接股票调仓
 
-如果股票a 当前是 1000000 组合中的 350000，用户想提高到 40%，且只通过外部现金买入股票a：
+用户输入示例：
 
 ```text
-(350000 + x) / (1000000 + x) = 0.40
-x = 83333.33，未按交易单位取整
+把宁德时代调到 90%，只告诉我需要买卖多少。
 ```
 
-如果股价为 10，交易单位为 100 股，则买入 8300 股，金额 83000。最终仓位：
+在上一个示例的穿透结果基础上，内部调用：
+
+```python
+from portfolio_math import compute_direct_stock_rebalance
+
+direct_plan = compute_direct_stock_rebalance(
+    exposure,
+    target_symbol="300750",
+    target_weight=0.9,
+    current_price=200,
+    lot_size=100,
+    current_direct_market_value=500000,
+)
+```
+
+最终回答只输出操作：
 
 ```text
-(350000 + 83000) / (1000000 + 83000) = 39.9815%
+目标：300750 宁德时代，从 85.00% 调整到 90.00%
+
+操作路径 1：直接股票
+买入/卖出：买入
+标的：300750 宁德时代
+数量：2500 股
+金额：500000.00
+取整：按 100 股向下取整
+调整后目标仓位：90.00%
 ```
 
 ## 基金路径调仓
 
-如果 A基金中股票a 权重为 70%，通过买入 A基金把股票a 从 35% 提高到 40%：
+如果用户允许通过持有基金调仓，且目标股票是基金成分股，内部调用：
 
-```text
-(350000 + 0.70x) / (1000000 + x) = 0.40
-x = 166666.67，未按交易单位取整
+```python
+from portfolio_math import compute_instrument_rebalance
+
+fund_plan = compute_instrument_rebalance(
+    exposure,
+    target_symbol="300750",
+    target_weight=0.9,
+    instrument_symbol="159836",
+    instrument_name="创业板300ETF天弘",
+    instrument_target_weight=0.7,
+    current_price=1,
+    lot_size=100,
+    current_instrument_market_value=500000,
+)
 ```
 
-如果基金价格为 1，交易单位为 100 份，则买入 166600 份，金额 166600。最终股票a 仓位：
+最终回答只输出操作：
 
 ```text
-(350000 + 0.70 * 166600) / (1000000 + 166600) = 39.9983%
+操作路径 2：基金
+买入/卖出：卖出
+标的：159836 创业板300ETF天弘
+数量：250000 份
+金额：250000.00
+取整：按 100 份向下取整
+调整后目标仓位：90.00%
 ```
 
-必须说明：买入该基金也会同步增加该基金其他成分股的敞口。
+不要在最终回答中说明“哪条路径更好”，也不要输出投资建议。
+
+## 未知基金敞口
+
+如果基金查询失败，或 `fund_components["159836"]["components"]` 为空，最终回答保留未知敞口：
+
+```text
+总市值：1000000.00
+
+| 代码 | 名称 | 股票维度市值 | 占比 | 来源 | 披露日期 |
+|---|---:|---:|---:|---|---|
+| 300750 | 宁德时代 | 500000.00 | 50.00% | 直接持股 | - |
+
+未知/未映射敞口：
+| 标识 | 市值 | 占比 | 原因 |
+|---|---:|---:|---|
+| UNKNOWN_FUND_EXPOSURE | 500000.00 | 50.00% | 未取得 159836 的基金成分股 |
+```

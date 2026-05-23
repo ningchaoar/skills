@@ -1,37 +1,36 @@
 # 数据结构
 
-准备传给 `scripts/portfolio_math.py` 的数据时，使用以下结构。
+准备调用 `scripts/query_state.py`、`scripts/fund_components.py` 和 `scripts/portfolio_math.py` 时，使用以下结构。
 
 ## 本次持仓输入
 
+从图片或文本提取后的持仓列表放入 `current_positions`。传给 `normalize_positions()` 或 `compute_stock_exposure()` 时，直接传这个列表。
+
 ```json
-{
-  "as_of": "2026-05-23",
-  "positions": [
-    {
-      "instrument_type": "fund",
-      "name": "A基金",
-      "symbol": "000000",
-      "market_value": 500000,
-      "quantity": null,
-      "current_price": null,
-      "cost_price": null,
-      "cost_amount": 480000,
-      "currency": "CNY"
-    },
-    {
-      "instrument_type": "stock",
-      "name": "股票b",
-      "symbol": "600000",
-      "market_value": 500000,
-      "quantity": 10000,
-      "current_price": 50,
-      "cost_price": 48,
-      "cost_amount": 480000,
-      "currency": "CNY"
-    }
-  ]
-}
+[
+  {
+    "instrument_type": "fund",
+    "name": "创业板300ETF天弘",
+    "symbol": "159836",
+    "market_value": 128640,
+    "quantity": 120000,
+    "current_price": 1.072,
+    "cost_price": 1.052,
+    "cost_amount": 126240,
+    "currency": "CNY"
+  },
+  {
+    "instrument_type": "stock",
+    "name": "宁德时代",
+    "symbol": "300750",
+    "market_value": 98640,
+    "quantity": 500,
+    "current_price": 197.28,
+    "cost_price": 185.6,
+    "cost_amount": 92800,
+    "currency": "CNY"
+  }
+]
 ```
 
 每条持仓的必需字段：
@@ -40,7 +39,7 @@
 - `name` 或 `symbol`：至少要有一个稳定标识
 - `market_value`，或同时提供 `quantity` 和 `current_price`
 
-仓位权重默认按当前市值计算。成本字段只用于展示和说明。
+仓位权重默认按当前市值计算。成本字段只保留为原始信息，不参与仓位权重计算。
 
 ## 单一临时查询文件
 
@@ -50,7 +49,7 @@
 .codex/skills/portfolio-stock-exposure/tmp/latest_query.json
 ```
 
-每次查询前覆盖旧内容。脚本默认从该文件读取输入，并把查询结果写回同一个文件。
+每次查询前覆盖旧内容。脚本默认从该文件读取输入，并把查询结果写回同一个文件。用 `write_latest_query()` 写入，避免路径和编码不一致。
 
 ```json
 {
@@ -60,6 +59,12 @@
       "name": "创业板300ETF天弘",
       "symbol": "159836",
       "market_value": 128640
+    },
+    {
+      "instrument_type": "fund",
+      "name": "通信ETF华夏",
+      "symbol": "515050",
+      "market_value": 84320
     }
   ],
   "fund_codes": ["159836", "515050"],
@@ -76,35 +81,35 @@
 
 ## 基金成分股
 
+`scripts/fund_components.py` 写回的 `fund_components` 以基金代码为 key。
+
 ```json
 {
-  "000000": {
-    "source": "基金公司官方披露",
+  "159836": {
+    "source": "东方财富-天天基金",
+    "source_url": "https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=159836&topline=100&year=2026&month=",
     "disclosure_date": "2026-03-31",
+    "fund_code": "159836",
     "components": [
       {
-        "symbol": "600000",
-        "name": "股票a",
-        "weight": 0.7
-      },
-      {
-        "symbol": "000001",
-        "name": "股票b",
-        "weight": 0.2
-      },
-      {
-        "symbol": "000002",
-        "name": "股票c",
-        "weight": 0.1
+        "symbol": "300750",
+        "name": "宁德时代",
+        "weight": 0.082,
+        "raw_weight_percent": 8.2,
+        "quarter": "2026-03-31",
+        "shares_10k": 36.5,
+        "market_value_10k": 7201.3
       }
     ]
   }
 }
 ```
 
-权重使用小数，不使用百分数。例如 70% 写作 `0.7`。
+权重使用小数，不使用百分数字符串。例如 8.2% 写作 `0.082`。
 
-`compute_stock_exposure()` 会拒绝大于 `1` 的单个权重，也会拒绝合计大于 `1` 的成分股权重。如果已知成分股权重合计小于 `1`，剩余部分会保留为 `UNMAPPED_<fund_symbol>`。
+`raw_weight_percent`、`shares_10k`、`market_value_10k` 是数据源原始展示字段，只用于追溯。实际穿透计算只使用 `weight`。
+
+`compute_stock_exposure()` 会拒绝大于 `1` 的单个权重，也会拒绝合计大于 `1` 的成分股权重。如果已知成分股权重合计小于 `1`，剩余部分会保留为 `UNMAPPED_<fund_symbol>`。如果没有可用成分股，整只基金保留为 `UNKNOWN_FUND_EXPOSURE`。
 
 ## 穿透持仓输出
 
@@ -113,14 +118,92 @@
   "total_market_value": 1000000,
   "exposures": [
     {
-      "symbol": "000001",
-      "name": "股票b",
-      "market_value": 600000,
-      "weight": 0.6,
-      "sources": []
+      "symbol": "300750",
+      "name": "宁德时代",
+      "market_value": 184000,
+      "weight": 0.184,
+      "sources": [
+        {
+          "type": "direct_stock",
+          "symbol": "300750",
+          "name": "宁德时代",
+          "market_value": 98640
+        },
+        {
+          "type": "fund_component",
+          "fund_symbol": "159836",
+          "fund_name": "创业板300ETF天弘",
+          "component_weight": 0.082,
+          "source": "东方财富-天天基金",
+          "disclosure_date": "2026-03-31"
+        }
+      ]
     }
   ]
 }
 ```
 
-向用户展示时，按 `weight` 或 `market_value` 从高到低排序。
+向用户展示时，按 `weight` 或 `market_value` 从高到低排序，并保留来源类型和基金成分股披露日期。
+
+## 调仓计算输出
+
+`compute_direct_stock_rebalance()` 返回直接股票路径：
+
+```json
+{
+  "target_symbol": "300750",
+  "target_name": "宁德时代",
+  "action": "buy",
+  "shares": 100,
+  "trade_amount": 19728,
+  "current_total_market_value": 1000000,
+  "current_target_market_value": 184000,
+  "current_target_weight": 0.184,
+  "target_weight": 0.2,
+  "theoretical_trade_amount": 20000,
+  "final_total_market_value": 1019728,
+  "final_target_market_value": 203728,
+  "final_target_weight": 0.1997897476591802,
+  "rounding": {
+    "lot_size": 100,
+    "current_price": 197.28,
+    "policy": "floor to avoid crossing the target by default"
+  }
+}
+```
+
+`compute_instrument_rebalance()` 返回基金路径，字段与直接路径类似，但数量字段为 `units`，并包含 `instrument_symbol`、`instrument_name`、`instrument_target_weight`。
+
+向用户展示时，只输出操作所需字段：买入/卖出、标的、数量或份额、金额、取整规则、调整后目标仓位。不要展示公式推导，除非用户明确要求。
+
+## 东方财富接口探测输出
+
+`scripts/eastmoney_interface_probe.py` 用于手动检查公开网页端点是否仍可解析。
+
+```json
+{
+  "stable": true,
+  "reports": [
+    {
+      "fund_code": "159836",
+      "year": "2026",
+      "attempts": 3,
+      "successful_attempts": 3,
+      "stable": true,
+      "reason": "ok",
+      "stability": {
+        "stable": true,
+        "reason": "ok",
+        "component_count": 100,
+        "disclosure_date": "2026-03-31",
+        "top_symbols": ["300750", "300308", "300502", "300059", "300274"]
+      },
+      "timings_seconds": [0.63, 0.58, 0.61],
+      "errors": [],
+      "checked_at": "2026-05-23T12:00:00+00:00"
+    }
+  ]
+}
+```
+
+该输出只用于维护脚本稳定性，不作为用户持仓分析的最终输出。
