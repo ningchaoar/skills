@@ -1,0 +1,6 @@
+interface:
+  display_name: "股票维度穿透持仓"
+  short_description: "把基金和股票持仓转换为股票维度敞口。"
+  default_prompt: "使用 $portfolio-stock-exposure 分析我的基金和股票持仓，并转换为股票维度穿透敞口。"
+policy:
+  allow_implicit_invocation: true
