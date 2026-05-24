@@ -49,6 +49,44 @@ python scripts/eastmoney_interface_probe.py --fund-codes 159836 515050 --year 20
 
 如果当前环境已安装 AKShare，也可以参考 AKShare 的 `fund_portfolio_hold_em` 接口口径；该接口同样来源于天天基金网“基金档案-投资组合-基金持仓”，返回指定基金和年份的持仓数据。当前技能内置脚本不强依赖 AKShare，避免额外安装依赖。
 
+## 直接股票行情和汇率
+
+直接股票缺少人民币 `market_value` 时，运行：
+
+```bash
+python scripts/position_values.py
+```
+
+行情默认使用东方财富公开 quote 端点：
+
+```text
+https://push2.eastmoney.com/api/qt/stock/get?secid=<market>.<symbol>&fields=f43,f57,f58,f59,f107,f152
+```
+
+`secid` 规则：
+
+- A 股：深市 `0.<symbol>`，沪市 `1.<symbol>`
+- 港股：`116.<symbol>`，例如 `116.00700`
+- 美股：`105.<ticker>`，例如 `105.PDD`
+
+价格解析优先使用 `f59` 作为缩放位数，按 `f43 / 10^f59` 得到本币价格；如果响应缺少 `f59`，才回退到 `f152`。
+
+汇率默认使用 Frankfurter 公开 API：
+
+```text
+https://api.frankfurter.app/latest?from=<currency>&to=CNY
+```
+
+该端点不需要 API key。脚本只支持 `CNY`、`HKD`、`USD` 到 `CNY` 的换算。东方财富 quote 和 Frankfurter 汇率都属于公开数据源，不承诺 SLA；网络失败、字段变化、限流或汇率服务异常时，不要猜测价格或汇率，要求用户补充人民币市值、本币价格或汇率。
+
+行情和汇率稳定性探测脚本：
+
+```bash
+python scripts/market_data_probe.py --quotes CN:300750 HK:00700 US:PDD --currencies USD HKD
+```
+
+该脚本是手动在线探测，不应放入默认单元测试。
+
 ## 基金类型处理
 
 ETF 通常可能有每日或接近日频的持仓数据。使用能找到的最新官方日期，不要默认它就是今天。若只通过东方财富/天天基金公开页面取得基金持仓，按页面返回的披露日期处理。
@@ -75,9 +113,9 @@ UNMAPPED_<fund_symbol>
 
 默认不覆盖：
 
-- 用户直接持有的美股、港股，且未提供人民币市值
 - 海外 ETF
 - 海外共同基金、全球共同基金的独立数据源查询
-- CNY、HKD、USD 或其他货币之间的汇率换算
+- 非 `CNY/HKD/USD` 货币之间的汇率换算
+- 税费、交易成本、盘中实时性保证
 
 如果用户要求扩展范围，先确认汇率换算口径和可接受的数据源，再开始计算。

@@ -23,12 +23,29 @@
     "instrument_type": "stock",
     "name": "宁德时代",
     "symbol": "300750",
+    "market": "CN",
     "market_value": 98640,
     "quantity": 500,
     "current_price": 197.28,
     "cost_price": 185.6,
     "cost_amount": 92800,
     "currency": "CNY"
+  },
+  {
+    "instrument_type": "stock",
+    "name": "腾讯控股",
+    "symbol": "00700",
+    "market": "HK",
+    "quantity": 100,
+    "currency": "HKD"
+  },
+  {
+    "instrument_type": "stock",
+    "name": "拼多多",
+    "symbol": "PDD",
+    "market": "US",
+    "quantity": 2,
+    "currency": "USD"
   }
 ]
 ```
@@ -37,9 +54,36 @@
 
 - `instrument_type`：`fund` 或 `stock`
 - `name` 或 `symbol`：至少要有一个稳定标识
-- `market_value`，或同时提供 `quantity` 和 `current_price`
+- `market_value`，或直接股票同时提供 `quantity` 和可查询/可填写的 `current_price`
 
-仓位权重默认按当前市值计算。成本字段只保留为原始信息，不参与仓位权重计算。
+仓位权重默认按人民币 `market_value` 计算。成本字段只保留为原始信息，不参与仓位权重计算。
+
+## 直接股票估值补全
+
+运行 `scripts/position_values.py` 后，直接股票缺失的人民币市值会写回 `current_positions`。
+
+```json
+{
+  "instrument_type": "stock",
+  "name": "拼多多",
+  "symbol": "PDD",
+  "market": "US",
+  "quantity": 2,
+  "currency": "USD",
+  "current_price": 94.52,
+  "local_market_value": 189.04,
+  "fx_rate_to_cny": 7.2,
+  "market_value": 1361.088,
+  "quote_source": "东方财富",
+  "quote_source_url": "https://push2.eastmoney.com/api/qt/stock/get?...",
+  "quote_checked_at": "2026-05-24T12:00:00+00:00",
+  "fx_source": "Frankfurter",
+  "fx_source_url": "https://api.frankfurter.app/latest?from=USD&to=CNY",
+  "fx_date": "2026-05-22"
+}
+```
+
+`market` 使用 `CN`、`HK`、`US`。`currency` 使用 `CNY`、`HKD`、`USD`。`market_value` 始终是人民币口径。
 
 ## 单一临时查询文件
 
@@ -73,6 +117,10 @@
     "provider": "eastmoney_tiantian_fund",
     "queried_at": "2026-05-23T12:00:00+00:00",
     "year": "2026"
+  },
+  "position_value_query": {
+    "base_currency": "CNY",
+    "queried_at": "2026-05-24T12:00:00+00:00"
   }
 }
 ```

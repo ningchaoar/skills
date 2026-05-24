@@ -92,6 +92,43 @@ class ExposureReportTests(unittest.TestCase):
         self.assertIn("未知/未映射敞口", markdown)
         self.assertIn("| UNKNOWN_FUND_EXPOSURE | 150000.00 | 15.00% | 未取得 159941 的基金成分股 |", markdown)
 
+    def test_exposure_report_merges_direct_us_stock_and_fund_component(self):
+        query = {
+            "current_positions": [
+                {
+                    "instrument_type": "stock",
+                    "name": "拼多多",
+                    "symbol": "PDD",
+                    "market": "US",
+                    "market_value": 7200,
+                },
+                {
+                    "instrument_type": "fund",
+                    "name": "中概互联网ETF易方达",
+                    "symbol": "513050",
+                    "market_value": 10000,
+                },
+            ],
+            "fund_components": {
+                "513050": {
+                    "source": "fixture",
+                    "disclosure_date": "2025-12-31",
+                    "components": [
+                        {"symbol": "PDD", "name": "拼多多", "market": "US", "weight": 0.07},
+                    ],
+                }
+            },
+        }
+
+        exposure = compute_exposure_from_query(query)
+        by_symbol = {item["symbol"]: item for item in exposure["exposures"]}
+        markdown = format_exposure_markdown(exposure)
+
+        self.assertEqual(by_symbol["PDD"]["market"], "US")
+        self.assertEqual(by_symbol["PDD"]["market_value"], 7900.0)
+        self.assertIn("| PDD | 拼多多 | US | 7900.00 |", markdown)
+        self.assertIn("直接持股 + 基金穿透", markdown)
+
 
 if __name__ == "__main__":
     unittest.main()

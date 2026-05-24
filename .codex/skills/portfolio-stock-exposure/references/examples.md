@@ -1,6 +1,6 @@
 # 示例
 
-本文件的基金成分股权重是测试夹具，用于说明计算流程；不要把示例权重当成最新真实成分股。真实执行时必须用 `scripts/fund_components.py` 查询并写回 `tmp/latest_query.json`。
+本文件的基金成分股权重、行情和汇率是测试夹具，用于说明计算流程；不要把示例权重、价格或汇率当成最新真实数据。真实执行时必须用 `scripts/position_values.py`、`scripts/fund_components.py` 查询并写回 `tmp/latest_query.json`。
 
 ## 持仓分析
 
@@ -58,6 +58,45 @@ exposure = compute_stock_exposure(positions, fund_components)
 ```
 
 不要在最终回答中解释公式或评价持仓。
+
+## 直接美港股持仓
+
+用户输入示例：
+
+```text
+我持有腾讯控股（00700）100 股，拼多多（PDD）2 股。
+```
+
+内部先写入：
+
+```json
+{
+  "current_positions": [
+    {"instrument_type": "stock", "name": "腾讯控股", "symbol": "00700", "quantity": 100},
+    {"instrument_type": "stock", "name": "拼多多", "symbol": "PDD", "quantity": 2}
+  ]
+}
+```
+
+运行：
+
+```bash
+python scripts/position_values.py
+python scripts/exposure_report.py
+```
+
+如果测试夹具价格为腾讯控股 441.40 HKD、拼多多 94.52 USD，汇率为 HKD/CNY 0.92、USD/CNY 7.20，则最终回答只输出数据：
+
+```text
+总市值：41969.89
+
+| 代码 | 名称 | 市场 | 股票维度市值 | 占比 | 来源 | 披露日期 |
+|---|---|---|---:|---:|---|---|
+| 00700 | 腾讯控股 | HK | 40608.80 | 96.76% | 直接持股 | - |
+| PDD | 拼多多 | US | 1361.09 | 3.24% | 直接持股 | - |
+```
+
+如果行情或汇率查询失败，只输出缺失字段清单，让用户补充人民币市值、本币价格或汇率。
 
 ## 直接股票调仓
 
