@@ -94,6 +94,7 @@
       {
         "symbol": "300750",
         "name": "宁德时代",
+        "market": "CN",
         "weight": 0.082,
         "raw_weight_percent": 8.2,
         "quarter": "2026-03-31",
@@ -106,6 +107,8 @@
 ```
 
 权重使用小数，不使用百分数字符串。例如 8.2% 写作 `0.082`。
+
+`market` 使用 `CN`、`HK`、`US` 或 `null`。东方财富脚本会按代码格式推断：6 位数字为 `CN`，5 位数字为 `HK`，美股 ticker 为 `US`。
 
 `raw_weight_percent`、`shares_10k`、`market_value_10k` 是数据源原始展示字段，只用于追溯。实际穿透计算只使用 `weight`。
 
@@ -120,6 +123,7 @@
     {
       "symbol": "300750",
       "name": "宁德时代",
+      "market": "CN",
       "market_value": 184000,
       "weight": 0.184,
       "sources": [
@@ -127,12 +131,14 @@
           "type": "direct_stock",
           "symbol": "300750",
           "name": "宁德时代",
+          "market": "CN",
           "market_value": 98640
         },
         {
           "type": "fund_component",
           "fund_symbol": "159836",
           "fund_name": "创业板300ETF天弘",
+          "market": "CN",
           "component_weight": 0.082,
           "source": "东方财富-天天基金",
           "disclosure_date": "2026-03-31"

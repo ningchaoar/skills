@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from copy import deepcopy
 from decimal import Decimal, ROUND_FLOOR, InvalidOperation
@@ -93,6 +94,7 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "direct_stock",
                     "symbol": position["symbol"],
                     "name": position["name"],
+                    "market": position.get("market") or _infer_market(position["symbol"]),
                     "market_value": _float(value),
                 },
             )
@@ -136,6 +138,9 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "fund_component",
                     "fund_symbol": fund_symbol,
                     "fund_name": position["name"],
+                    "market": component.get("market") or _infer_market(
+                        str(component.get("symbol", "")).strip()
+                    ),
                     "component_weight": _float(weight),
                     "source": holding.get("source"),
                     "disclosure_date": holding.get("disclosure_date"),
@@ -167,6 +172,7 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
             {
                 "symbol": item["symbol"],
                 "name": item["name"],
+                "market": _merged_market(item["sources"]),
                 "market_value": _float(market_value),
                 "weight": _float(weight),
                 "sources": item["sources"],
@@ -188,6 +194,32 @@ def _add_exposure(exposures, *, symbol: str, name: str, market_value: Decimal, s
     item["name"] = item["name"] or name or symbol
     item["market_value"] += market_value
     item["sources"].append(source)
+
+
+def _merged_market(sources: list[dict]) -> str | None:
+    markets = {
+        str(source.get("market")).strip()
+        for source in sources
+        if isinstance(source, dict) and source.get("market")
+    }
+    if not markets:
+        return None
+    if len(markets) == 1:
+        return next(iter(markets))
+    return "/".join(sorted(markets))
+
+
+def _infer_market(symbol: str) -> str | None:
+    symbol = str(symbol).strip()
+    if not symbol:
+        return None
+    if len(symbol) == 6 and symbol.isdigit():
+        return "CN"
+    if len(symbol) == 5 and symbol.isdigit():
+        return "HK"
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", symbol):
+        return "US"
+    return None
 
 
 def compute_direct_stock_rebalance(

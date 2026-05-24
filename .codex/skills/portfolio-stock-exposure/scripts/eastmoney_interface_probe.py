@@ -105,7 +105,7 @@ def probe_fund(
 
 
 def _missing_required_fields(components: list[dict]) -> list[str]:
-    required_fields = ["symbol", "name", "weight", "raw_weight_percent"]
+    required_fields = ["symbol", "name", "market", "weight", "raw_weight_percent"]
     missing = set()
     for component in components:
         for field in required_fields:

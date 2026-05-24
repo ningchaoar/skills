@@ -76,6 +76,7 @@ def parse_eastmoney_holdings(text: str, *, fund_code: str, source_url: str) -> d
             {
                 "symbol": item["symbol"],
                 "name": item["name"],
+                "market": item["market"],
                 "weight": item["weight"],
                 "raw_weight_percent": item["raw_weight_percent"],
                 "quarter": item["quarter"],
@@ -177,6 +178,7 @@ def _parse_holding_cells(cells: list[str]) -> dict | None:
     return {
         "symbol": symbol,
         "name": name,
+        "market": _infer_market(symbol),
         "weight": round(percent / 100, 10),
         "raw_weight_percent": percent,
         "quarter": quarter,
@@ -187,8 +189,26 @@ def _parse_holding_cells(cells: list[str]) -> dict | None:
 
 def _find_stock_code_index(cells: list[str]) -> int | None:
     for idx, cell in enumerate(cells):
-        if re.fullmatch(r"\d{6}", cell):
+        if _is_security_symbol(cell):
             return idx
+    return None
+
+
+def _is_security_symbol(value: str) -> bool:
+    value = value.strip()
+    if re.fullmatch(r"\d{5,6}", value):
+        return True
+    return re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", value) is not None
+
+
+def _infer_market(symbol: str) -> str | None:
+    symbol = symbol.strip()
+    if re.fullmatch(r"\d{6}", symbol):
+        return "CN"
+    if re.fullmatch(r"\d{5}", symbol):
+        return "HK"
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", symbol):
+        return "US"
     return None
 
 

@@ -24,8 +24,8 @@ def format_exposure_markdown(exposure: dict) -> str:
     lines = [
         f"总市值：{total_market_value:.2f}",
         "",
-        "| 代码 | 名称 | 股票维度市值 | 占比 | 来源 | 披露日期 |",
-        "|---|---:|---:|---:|---|---|",
+        "| 代码 | 名称 | 市场 | 股票维度市值 | 占比 | 来源 | 披露日期 |",
+        "|---|---|---|---:|---:|---|---|",
     ]
     unknown_rows = []
 
@@ -35,6 +35,7 @@ def format_exposure_markdown(exposure: dict) -> str:
         market_value = float(item.get("market_value", 0))
         weight = float(item.get("weight", 0))
         sources = item.get("sources", [])
+        market = item.get("market") or _market_from_sources(sources)
         source_types = {source.get("type") for source in sources if isinstance(source, dict)}
 
         if _is_unknown_or_unmapped(symbol, source_types):
@@ -49,9 +50,10 @@ def format_exposure_markdown(exposure: dict) -> str:
             continue
 
         lines.append(
-            "| {symbol} | {name} | {market_value:.2f} | {weight:.2%} | {source} | {dates} |".format(
+            "| {symbol} | {name} | {market} | {market_value:.2f} | {weight:.2%} | {source} | {dates} |".format(
                 symbol=symbol,
                 name=name,
+                market=market or "-",
                 market_value=market_value,
                 weight=weight,
                 source=_source_label(source_types),
@@ -100,6 +102,19 @@ def _source_label(source_types: set) -> str:
     if has_fund:
         return "基金穿透"
     return " + ".join(sorted(str(item) for item in source_types if item)) or "-"
+
+
+def _market_from_sources(sources: list[dict]) -> str | None:
+    markets = {
+        str(source.get("market")).strip()
+        for source in sources
+        if isinstance(source, dict) and source.get("market")
+    }
+    if not markets:
+        return None
+    if len(markets) == 1:
+        return next(iter(markets))
+    return "/".join(sorted(markets))
 
 
 def _disclosure_dates(sources: list[dict]) -> str:

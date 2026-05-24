@@ -28,6 +28,7 @@ class FundComponentsTests(unittest.TestCase):
                 {
                     "symbol": "300750",
                     "name": "宁德时代",
+                    "market": "CN",
                     "weight": 0.082,
                     "raw_weight_percent": 8.2,
                     "quarter": "2024年4季度",
@@ -37,6 +38,7 @@ class FundComponentsTests(unittest.TestCase):
                 {
                     "symbol": "300059",
                     "name": "东方财富",
+                    "market": "CN",
                     "weight": 0.051,
                     "raw_weight_percent": 5.1,
                     "quarter": "2024年4季度",
@@ -58,10 +60,61 @@ class FundComponentsTests(unittest.TestCase):
         self.assertEqual(result["disclosure_date"], "2025-12-31")
         self.assertEqual(result["components"][0]["symbol"], "300750")
         self.assertEqual(result["components"][0]["name"], "宁德时代")
+        self.assertEqual(result["components"][0]["market"], "CN")
         self.assertEqual(result["components"][0]["weight"], 0.1325)
         self.assertEqual(result["components"][0]["quarter"], "2025-12-31")
         self.assertEqual(result["components"][0]["shares_10k"], 5.25)
         self.assertEqual(result["components"][0]["market_value_10k"], 1050.0)
+
+    def test_parse_eastmoney_qdii_page_with_hk_and_us_symbols(self):
+        html = """
+        var apidata={ content:"<div class='box'><h4 class='t'><label>中概互联网ETF易方达&nbsp;&nbsp;2025年4季度股票投资明细</label><label>截止至：<font>2025-12-31</font></label></h4>
+        <table><thead><tr><th>序号</th><th>股票代码</th><th>股票名称</th><th>相关资讯</th><th>占净值比例</th><th>持股数</th><th>持仓市值</th></tr></thead>
+        <tbody>
+        <tr><td>1</td><td><a>00700</a></td><td><a>腾讯控股</a></td><td><a>股吧</a><a>行情</a></td><td>31.02%</td><td>2,285.64</td><td>1,236,597.02</td></tr>
+        <tr><td>2</td><td><a>09988</a></td><td><a>阿里巴巴-W</a></td><td><a>股吧</a><a>行情</a></td><td>25.90%</td><td>8,004.67</td><td>1,032,440.76</td></tr>
+        <tr><td>3</td><td><a>PDD</a></td><td><a>拼多多</a></td><td><a>股吧</a><a>行情</a></td><td>7.01%</td><td>350.40</td><td>279,268.39</td></tr>
+        </tbody></table></div>"};
+        """
+
+        result = parse_eastmoney_holdings(html, fund_code="513050", source_url="https://example.test")
+
+        self.assertEqual(result["disclosure_date"], "2025-12-31")
+        self.assertEqual(
+            result["components"],
+            [
+                {
+                    "symbol": "00700",
+                    "name": "腾讯控股",
+                    "market": "HK",
+                    "weight": 0.3102,
+                    "raw_weight_percent": 31.02,
+                    "quarter": "2025-12-31",
+                    "shares_10k": 2285.64,
+                    "market_value_10k": 1236597.02,
+                },
+                {
+                    "symbol": "09988",
+                    "name": "阿里巴巴-W",
+                    "market": "HK",
+                    "weight": 0.259,
+                    "raw_weight_percent": 25.9,
+                    "quarter": "2025-12-31",
+                    "shares_10k": 8004.67,
+                    "market_value_10k": 1032440.76,
+                },
+                {
+                    "symbol": "PDD",
+                    "name": "拼多多",
+                    "market": "US",
+                    "weight": 0.0701,
+                    "raw_weight_percent": 7.01,
+                    "quarter": "2025-12-31",
+                    "shares_10k": 350.4,
+                    "market_value_10k": 279268.39,
+                },
+            ],
+        )
 
     def test_update_latest_query_writes_components_back_to_same_file(self):
         query_file = Path(__file__).parent / ".tmp-latest-query.json"

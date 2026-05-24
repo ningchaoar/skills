@@ -83,6 +83,36 @@ class PortfolioMathTests(unittest.TestCase):
         self.assertClose(by_symbol["UNKNOWN_FUND_EXPOSURE"]["market_value"], 100000)
         self.assertClose(by_symbol["UNKNOWN_FUND_EXPOSURE"]["weight"], 0.25)
 
+    def test_compute_stock_exposure_preserves_component_markets(self):
+        positions = normalize_positions(
+            [
+                {
+                    "instrument_type": "fund",
+                    "name": "中概互联网ETF易方达",
+                    "symbol": "513050",
+                    "market_value": 100000,
+                }
+            ]
+        )
+        components = {
+            "513050": {
+                "source": "fixture",
+                "disclosure_date": "2025-12-31",
+                "components": [
+                    {"symbol": "00700", "name": "腾讯控股", "market": "HK", "weight": 0.31},
+                    {"symbol": "PDD", "name": "拼多多", "market": "US", "weight": 0.07},
+                ],
+            }
+        }
+
+        exposure = compute_stock_exposure(positions, components)
+
+        by_symbol = {item["symbol"]: item for item in exposure["exposures"]}
+        self.assertEqual(by_symbol["00700"]["market"], "HK")
+        self.assertEqual(by_symbol["00700"]["sources"][0]["market"], "HK")
+        self.assertEqual(by_symbol["PDD"]["market"], "US")
+        self.assertEqual(by_symbol["PDD"]["sources"][0]["market"], "US")
+
     def test_compute_stock_exposure_rejects_component_weights_above_one(self):
         positions = normalize_positions(
             [

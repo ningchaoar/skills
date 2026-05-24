@@ -11,6 +11,7 @@ def sample_result(disclosure_date="2025-12-31", first_symbol="300750"):
             {
                 "symbol": first_symbol,
                 "name": "宁德时代",
+                "market": "CN",
                 "weight": 0.1325,
                 "raw_weight_percent": 13.25,
                 "quarter": disclosure_date,
@@ -20,6 +21,7 @@ def sample_result(disclosure_date="2025-12-31", first_symbol="300750"):
             {
                 "symbol": "300059",
                 "name": "东方财富",
+                "market": "CN",
                 "weight": 0.052,
                 "raw_weight_percent": 5.2,
                 "quarter": disclosure_date,

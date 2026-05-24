@@ -33,7 +33,8 @@ https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=<fund_code>&
 
 解析规则：
 
-- 以 6 位股票代码定位表格中的持仓行，不依赖固定列序。
+- 以证券代码定位表格中的持仓行，不依赖固定列序；支持 A 股 6 位代码、港股 5 位代码和美股 ticker。
+- 对解析出的成分股写入 `market`：A 股为 `CN`，港股为 `HK`，美股为 `US`。
 - 以百分号字段解析成分股权重，写入 `weight` 和 `raw_weight_percent`。
 - 同一年有多个披露期时，只保留解析结果中最新的 `quarter`/`disclosure_date`。
 - 解析不到任何成分股时，调用方必须把基金保留为 `UNKNOWN_FUND_EXPOSURE`。
@@ -74,10 +75,9 @@ UNMAPPED_<fund_symbol>
 
 默认不覆盖：
 
-- 美股
+- 用户直接持有的美股、港股，且未提供人民币市值
 - 海外 ETF
-- QDII 基金
-- 全球共同基金
+- 海外共同基金、全球共同基金的独立数据源查询
 - CNY、HKD、USD 或其他货币之间的汇率换算
 
 如果用户要求扩展范围，先确认汇率换算口径和可接受的数据源，再开始计算。
