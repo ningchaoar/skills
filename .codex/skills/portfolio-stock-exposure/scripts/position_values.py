@@ -4,17 +4,16 @@ import argparse
 import sys
 from copy import deepcopy
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from market_data import (
     BASE_CURRENCY,
     fetch_fx_rate_to_cny,
     fetch_quote,
-    infer_market,
     market_currency,
 )
-from query_state import read_latest_query, write_latest_query
+from query_state import read_latest_query, resolve_query_path, write_latest_query
+from script_utils import decimal_to_float, decimal_value, infer_market
 
 
 def enrich_position_values(
@@ -96,36 +95,22 @@ def _enrich_position(position: dict, idx: int, *, quote_fetcher, fx_fetcher) -> 
         currency = currency or market_currency(market)
         enriched["currency"] = currency
 
-    local_market_value = _decimal(quantity, f"positions[{idx}].quantity") * _decimal(
+    local_market_value = decimal_value(quantity, f"positions[{idx}].quantity") * decimal_value(
         current_price, f"positions[{idx}].current_price"
     )
     if local_market_value < 0:
         raise ValueError(f"positions[{idx}].local_market_value must be non-negative")
 
     fx = fx_fetcher(currency)
-    fx_rate = _decimal(fx.get("fx_rate_to_cny"), "fx_rate_to_cny")
-    enriched["local_market_value"] = _float(local_market_value)
-    enriched["fx_rate_to_cny"] = _float(fx_rate)
-    enriched["market_value"] = _float(local_market_value * fx_rate)
+    fx_rate = decimal_value(fx.get("fx_rate_to_cny"), "fx_rate_to_cny")
+    enriched["local_market_value"] = decimal_to_float(local_market_value)
+    enriched["fx_rate_to_cny"] = decimal_to_float(fx_rate)
+    enriched["market_value"] = decimal_to_float(local_market_value * fx_rate)
     for field in ("fx_source", "fx_source_url", "fx_date"):
         if fx.get(field) is not None:
             enriched[field] = fx[field]
 
     return enriched
-
-
-def _decimal(value, field_name: str) -> Decimal:
-    try:
-        result = Decimal(str(value))
-    except (InvalidOperation, ValueError) as exc:
-        raise ValueError(f"{field_name} must be numeric") from exc
-    if not result.is_finite():
-        raise ValueError(f"{field_name} must be finite")
-    return result
-
-
-def _float(value: Decimal) -> float:
-    return float(value)
 
 
 def main(argv=None) -> int:
@@ -134,12 +119,12 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        payload = update_latest_query_with_position_values(args.query_file)
+        update_latest_query_with_position_values(args.query_file)
     except Exception as exc:
         print(f"position value query failed: {exc}", file=sys.stderr)
         return 1
 
-    print(write_latest_query(payload, args.query_file))
+    print(resolve_query_path(args.query_file))
     return 0
 
 

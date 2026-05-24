@@ -1,26 +1,13 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from copy import deepcopy
-from decimal import Decimal, ROUND_FLOOR, InvalidOperation
+from decimal import Decimal, ROUND_FLOOR
+
+from script_utils import decimal_to_float, decimal_value, infer_market, merged_market
 
 
 UNKNOWN_FUND_EXPOSURE = "UNKNOWN_FUND_EXPOSURE"
-
-
-def _decimal(value, field_name: str) -> Decimal:
-    try:
-        result = Decimal(str(value))
-    except (InvalidOperation, ValueError) as exc:
-        raise ValueError(f"{field_name} must be numeric") from exc
-    if not result.is_finite():
-        raise ValueError(f"{field_name} must be finite")
-    return result
-
-
-def _float(value: Decimal) -> float:
-    return float(value)
 
 
 def normalize_positions(positions: list[dict]) -> list[dict]:
@@ -55,11 +42,11 @@ def normalize_positions(positions: list[dict]) -> list[dict]:
                 raise ValueError(
                     f"positions[{idx}] must include market_value or quantity + current_price"
                 )
-            market_value_decimal = _decimal(quantity, f"positions[{idx}].quantity") * _decimal(
+            market_value_decimal = decimal_value(quantity, f"positions[{idx}].quantity") * decimal_value(
                 current_price, f"positions[{idx}].current_price"
             )
         else:
-            market_value_decimal = _decimal(market_value, f"positions[{idx}].market_value")
+            market_value_decimal = decimal_value(market_value, f"positions[{idx}].market_value")
 
         if market_value_decimal < 0:
             raise ValueError(f"positions[{idx}].market_value must be non-negative")
@@ -67,7 +54,7 @@ def normalize_positions(positions: list[dict]) -> list[dict]:
         position["instrument_type"] = instrument_type
         position["symbol"] = symbol or name
         position["name"] = name or symbol
-        position["market_value"] = _float(market_value_decimal)
+        position["market_value"] = decimal_to_float(market_value_decimal)
         normalized.append(position)
 
     return normalized
@@ -76,11 +63,11 @@ def normalize_positions(positions: list[dict]) -> list[dict]:
 def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict:
     """Expand fund holdings and return stock-level exposure by market value."""
     normalized_positions = normalize_positions(positions)
-    total_market_value = sum(_decimal(item["market_value"], "market_value") for item in normalized_positions)
+    total_market_value = sum(decimal_value(item["market_value"], "market_value") for item in normalized_positions)
     exposures = defaultdict(lambda: {"symbol": "", "name": "", "market_value": Decimal("0"), "sources": []})
 
     for position in normalized_positions:
-        value = _decimal(position["market_value"], "market_value")
+        value = decimal_value(position["market_value"], "market_value")
         if value == 0:
             continue
 
@@ -94,8 +81,8 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "direct_stock",
                     "symbol": position["symbol"],
                     "name": position["name"],
-                    "market": position.get("market") or _infer_market(position["symbol"]),
-                    "market_value": _float(value),
+                    "market": position.get("market") or infer_market(position["symbol"]),
+                    "market_value": decimal_to_float(value),
                 },
             )
             continue
@@ -113,14 +100,14 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "unknown_fund",
                     "fund_symbol": fund_symbol,
                     "fund_name": position["name"],
-                    "market_value": _float(value),
+                    "market_value": decimal_to_float(value),
                 },
             )
             continue
 
         used_weight = Decimal("0")
         for component in components:
-            weight = _decimal(component.get("weight", 0), "component.weight")
+            weight = decimal_value(component.get("weight", 0), "component.weight")
             if weight > 1:
                 raise ValueError("component.weight must be between 0 and 1")
             if weight <= 0:
@@ -138,10 +125,10 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "fund_component",
                     "fund_symbol": fund_symbol,
                     "fund_name": position["name"],
-                    "market": component.get("market") or _infer_market(
+                    "market": component.get("market") or infer_market(
                         str(component.get("symbol", "")).strip()
                     ),
-                    "component_weight": _float(weight),
+                    "component_weight": decimal_to_float(weight),
                     "source": holding.get("source"),
                     "disclosure_date": holding.get("disclosure_date"),
                 },
@@ -158,7 +145,7 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
                     "type": "unmapped_fund_residual",
                     "fund_symbol": fund_symbol,
                     "fund_name": position["name"],
-                    "component_weight": _float(residual),
+                    "component_weight": decimal_to_float(residual),
                     "source": holding.get("source"),
                     "disclosure_date": holding.get("disclosure_date"),
                 },
@@ -172,16 +159,16 @@ def compute_stock_exposure(positions: list[dict], fund_components: dict) -> dict
             {
                 "symbol": item["symbol"],
                 "name": item["name"],
-                "market": _merged_market(item["sources"]),
-                "market_value": _float(market_value),
-                "weight": _float(weight),
+                "market": merged_market(item["sources"]),
+                "market_value": decimal_to_float(market_value),
+                "weight": decimal_to_float(weight),
                 "sources": item["sources"],
             }
         )
 
     exposure_items.sort(key=lambda item: item["market_value"], reverse=True)
     return {
-        "total_market_value": _float(total_market_value),
+        "total_market_value": decimal_to_float(total_market_value),
         "exposures": exposure_items,
     }
 
@@ -194,32 +181,6 @@ def _add_exposure(exposures, *, symbol: str, name: str, market_value: Decimal, s
     item["name"] = item["name"] or name or symbol
     item["market_value"] += market_value
     item["sources"].append(source)
-
-
-def _merged_market(sources: list[dict]) -> str | None:
-    markets = {
-        str(source.get("market")).strip()
-        for source in sources
-        if isinstance(source, dict) and source.get("market")
-    }
-    if not markets:
-        return None
-    if len(markets) == 1:
-        return next(iter(markets))
-    return "/".join(sorted(markets))
-
-
-def _infer_market(symbol: str) -> str | None:
-    symbol = str(symbol).strip()
-    if not symbol:
-        return None
-    if len(symbol) == 6 and symbol.isdigit():
-        return "CN"
-    if len(symbol) == 5 and symbol.isdigit():
-        return "HK"
-    if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", symbol):
-        return "US"
-    return None
 
 
 def compute_direct_stock_rebalance(
@@ -236,9 +197,9 @@ def compute_direct_stock_rebalance(
     For buys, only the target stock and total portfolio value increase. For
     sells, only the target stock and total portfolio value decrease.
     """
-    target_weight = _decimal(target_weight, "target_weight")
-    current_price = _decimal(current_price, "current_price")
-    total_value = _decimal(exposure.get("total_market_value", 0), "total_market_value")
+    target_weight = decimal_value(target_weight, "target_weight")
+    current_price = decimal_value(current_price, "current_price")
+    total_value = decimal_value(exposure.get("total_market_value", 0), "total_market_value")
 
     if target_weight < 0 or target_weight >= 1:
         raise ValueError("target_weight must be >= 0 and < 1")
@@ -249,7 +210,7 @@ def compute_direct_stock_rebalance(
     if lot_size <= 0:
         raise ValueError("lot_size must be positive")
     if current_direct_market_value is not None:
-        current_direct_market_value = _decimal(
+        current_direct_market_value = decimal_value(
             current_direct_market_value, "current_direct_market_value"
         )
         if current_direct_market_value < 0:
@@ -259,7 +220,7 @@ def compute_direct_stock_rebalance(
     target_name = target_symbol
     for item in exposure.get("exposures", []):
         if item.get("symbol") == target_symbol:
-            current_target_value = _decimal(item.get("market_value", 0), "target market_value")
+            current_target_value = decimal_value(item.get("market_value", 0), "target market_value")
             target_name = item.get("name") or target_symbol
             break
 
@@ -312,20 +273,20 @@ def compute_direct_stock_rebalance(
         "target_name": target_name,
         "action": action,
         "shares": shares,
-        "trade_amount": _float(trade_amount),
-        "current_total_market_value": _float(total_value),
-        "current_target_market_value": _float(current_target_value),
-        "current_target_weight": _float(current_target_value / total_value),
-        "target_weight": _float(target_weight),
-        "theoretical_trade_amount": _float(theoretical_trade_amount),
-        "final_total_market_value": _float(final_total),
-        "final_target_market_value": _float(final_target_value),
-        "final_target_weight": _float(final_weight),
+        "trade_amount": decimal_to_float(trade_amount),
+        "current_total_market_value": decimal_to_float(total_value),
+        "current_target_market_value": decimal_to_float(current_target_value),
+        "current_target_weight": decimal_to_float(current_target_value / total_value),
+        "target_weight": decimal_to_float(target_weight),
+        "theoretical_trade_amount": decimal_to_float(theoretical_trade_amount),
+        "final_total_market_value": decimal_to_float(final_total),
+        "final_target_market_value": decimal_to_float(final_target_value),
+        "final_target_weight": decimal_to_float(final_weight),
         "capped_by_direct_holding": capped_by_direct_holding,
         "reason": reason,
         "rounding": {
             "lot_size": lot_size,
-            "current_price": _float(current_price),
+            "current_price": decimal_to_float(current_price),
             "policy": "floor to avoid crossing the target by default",
         },
     }
@@ -348,10 +309,10 @@ def compute_instrument_rebalance(
     Use this for a fund when the target stock is one component of the fund.
     instrument_target_weight is the target stock's weight inside that fund.
     """
-    target_weight = _decimal(target_weight, "target_weight")
-    instrument_target_weight = _decimal(instrument_target_weight, "instrument_target_weight")
-    current_price = _decimal(current_price, "current_price")
-    total_value = _decimal(exposure.get("total_market_value", 0), "total_market_value")
+    target_weight = decimal_value(target_weight, "target_weight")
+    instrument_target_weight = decimal_value(instrument_target_weight, "instrument_target_weight")
+    current_price = decimal_value(current_price, "current_price")
+    total_value = decimal_value(exposure.get("total_market_value", 0), "total_market_value")
 
     if target_weight < 0 or target_weight >= 1:
         raise ValueError("target_weight must be >= 0 and < 1")
@@ -368,7 +329,7 @@ def compute_instrument_rebalance(
     target_name = target_symbol
     for item in exposure.get("exposures", []):
         if item.get("symbol") == target_symbol:
-            current_target_value = _decimal(item.get("market_value", 0), "target market_value")
+            current_target_value = decimal_value(item.get("market_value", 0), "target market_value")
             target_name = item.get("name") or target_symbol
             break
 
@@ -408,7 +369,7 @@ def compute_instrument_rebalance(
 
     sell_amount = (current_target_value - target_weight * total_value) / denominator
     if sell_amount > 0 and current_instrument_market_value is not None:
-        max_sell_value = _decimal(current_instrument_market_value, "current_instrument_market_value")
+        max_sell_value = decimal_value(current_instrument_market_value, "current_instrument_market_value")
         max_units = _rounded_units(max_sell_value, current_price, lot_size)
         units = min(_rounded_units(sell_amount, current_price, lot_size), max_units)
         trade_amount = current_price * Decimal(units)
@@ -484,19 +445,19 @@ def _instrument_result(
         "instrument_name": instrument_name,
         "action": action,
         "units": units,
-        "trade_amount": _float(trade_amount),
-        "current_total_market_value": _float(total_value),
-        "current_target_market_value": _float(target_value),
-        "current_target_weight": _float(target_value / total_value),
-        "instrument_target_weight": _float(instrument_target_weight),
-        "target_weight": _float(target_weight),
-        "theoretical_trade_amount": _float(theoretical_trade_amount),
-        "final_total_market_value": _float(final_total),
-        "final_target_market_value": _float(final_target_value),
-        "final_target_weight": _float(final_weight),
+        "trade_amount": decimal_to_float(trade_amount),
+        "current_total_market_value": decimal_to_float(total_value),
+        "current_target_market_value": decimal_to_float(target_value),
+        "current_target_weight": decimal_to_float(target_value / total_value),
+        "instrument_target_weight": decimal_to_float(instrument_target_weight),
+        "target_weight": decimal_to_float(target_weight),
+        "theoretical_trade_amount": decimal_to_float(theoretical_trade_amount),
+        "final_total_market_value": decimal_to_float(final_total),
+        "final_target_market_value": decimal_to_float(final_target_value),
+        "final_target_weight": decimal_to_float(final_weight),
         "rounding": {
             "lot_size": lot_size,
-            "current_price": _float(current_price),
+            "current_price": decimal_to_float(current_price),
             "policy": "floor to avoid crossing the target by default",
         },
     }

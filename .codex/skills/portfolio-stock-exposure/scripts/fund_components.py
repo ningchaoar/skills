@@ -9,7 +9,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from query_state import read_latest_query, write_latest_query
+from query_state import read_latest_query, resolve_query_path, write_latest_query
+from script_utils import infer_market
 
 
 EASTMONEY_ARCHIVES_URL = "https://fundf10.eastmoney.com/FundArchivesDatas.aspx"
@@ -178,7 +179,7 @@ def _parse_holding_cells(cells: list[str]) -> dict | None:
     return {
         "symbol": symbol,
         "name": name,
-        "market": _infer_market(symbol),
+        "market": infer_market(symbol),
         "weight": round(percent / 100, 10),
         "raw_weight_percent": percent,
         "quarter": quarter,
@@ -199,17 +200,6 @@ def _is_security_symbol(value: str) -> bool:
     if re.fullmatch(r"\d{5,6}", value):
         return True
     return re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", value) is not None
-
-
-def _infer_market(symbol: str) -> str | None:
-    symbol = symbol.strip()
-    if re.fullmatch(r"\d{6}", symbol):
-        return "CN"
-    if re.fullmatch(r"\d{5}", symbol):
-        return "HK"
-    if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", symbol):
-        return "US"
-    return None
 
 
 def _find_percent_index(cells: list[str], start_index: int) -> int | None:
@@ -267,12 +257,12 @@ def main(argv=None) -> int:
             }
             write_latest_query(payload, args.query_file)
         else:
-            payload = update_latest_query_with_fund_components(args.query_file, year=args.year)
+            update_latest_query_with_fund_components(args.query_file, year=args.year)
     except Exception as exc:
         print(f"fund component query failed: {exc}", file=sys.stderr)
         return 1
 
-    print(write_latest_query(payload, args.query_file))
+    print(resolve_query_path(args.query_file))
     return 0
 
 

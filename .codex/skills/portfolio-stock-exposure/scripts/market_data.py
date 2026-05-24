@@ -3,25 +3,16 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from script_utils import decimal_to_float, decimal_value, infer_market
 
 
 EASTMONEY_QUOTE_URL = "https://push2.eastmoney.com/api/qt/stock/get"
 FRANKFURTER_LATEST_URL = "https://api.frankfurter.app/latest"
 BASE_CURRENCY = "CNY"
-
-
-def infer_market(symbol: str) -> str | None:
-    symbol = str(symbol).strip()
-    if re.fullmatch(r"\d{6}", symbol):
-        return "CN"
-    if re.fullmatch(r"\d{5}", symbol):
-        return "HK"
-    if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", symbol):
-        return "US"
-    return None
 
 
 def market_currency(market: str) -> str:
@@ -96,7 +87,7 @@ def parse_eastmoney_quote(
     if raw_price in (None, "-", "") or scale in (None, "-", ""):
         raise ValueError("eastmoney quote response missing price or scale")
 
-    price = _decimal(raw_price, "f43") / (Decimal(10) ** int(scale))
+    price = decimal_value(raw_price, "f43") / (Decimal(10) ** int(scale))
     if price <= 0:
         raise ValueError("eastmoney quote price must be positive")
 
@@ -107,10 +98,10 @@ def parse_eastmoney_quote(
         "name": str(data.get("f58") or symbol).strip(),
         "market": market,
         "currency": market_currency(market),
-        "current_price": _float(price),
+        "current_price": decimal_to_float(price),
         "quote_source": "东方财富",
         "quote_source_url": source_url,
-        "quote_raw_price": _float(_decimal(raw_price, "f43")),
+        "quote_raw_price": decimal_to_float(decimal_value(raw_price, "f43")),
         "quote_price_scale": int(scale),
     }
 
@@ -146,29 +137,15 @@ def parse_frankfurter_rate(payload, currency: str, *, source_url: str) -> dict:
     if not isinstance(rates, dict) or BASE_CURRENCY not in rates:
         raise ValueError(f"frankfurter response missing {BASE_CURRENCY} rate")
 
-    rate = _decimal(rates[BASE_CURRENCY], "fx_rate_to_cny")
+    rate = decimal_value(rates[BASE_CURRENCY], "fx_rate_to_cny")
     if rate <= 0:
         raise ValueError("fx_rate_to_cny must be positive")
 
     return {
         "currency": currency,
         "target_currency": BASE_CURRENCY,
-        "fx_rate_to_cny": _float(rate),
+        "fx_rate_to_cny": decimal_to_float(rate),
         "fx_date": str(payload.get("date") or ""),
         "fx_source": "Frankfurter",
         "fx_source_url": source_url,
     }
-
-
-def _decimal(value, field_name: str) -> Decimal:
-    try:
-        result = Decimal(str(value))
-    except (InvalidOperation, ValueError) as exc:
-        raise ValueError(f"{field_name} must be numeric") from exc
-    if not result.is_finite():
-        raise ValueError(f"{field_name} must be finite")
-    return result
-
-
-def _float(value: Decimal) -> float:
-    return float(value)

@@ -1,7 +1,10 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
-from position_values import enrich_position_values, update_latest_query_with_position_values
+from position_values import enrich_position_values, main, update_latest_query_with_position_values
 from query_state import read_latest_query, write_latest_query
 
 
@@ -154,6 +157,32 @@ class PositionValuesTests(unittest.TestCase):
         self.assertEqual(updated, read_latest_query(query_file))
         self.assertEqual(updated["position_value_query"]["base_currency"], "CNY")
         self.assertEqual(updated["current_positions"][0]["market_value"], 40608.8)
+
+    def test_cli_writes_latest_query_once(self):
+        query_file = Path(__file__).parent / ".tmp-position-values-cli.json"
+        self.addCleanup(lambda: query_file.unlink() if query_file.exists() else None)
+        write_latest_query(
+            {
+                "current_positions": [
+                    {
+                        "instrument_type": "stock",
+                        "name": "宁德时代",
+                        "symbol": "300750",
+                        "market_value": 98640,
+                    }
+                ]
+            },
+            query_file,
+        )
+
+        with patch("position_values.write_latest_query", wraps=write_latest_query) as write_mock:
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(["--query-file", str(query_file)])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(write_mock.call_count, 1)
+        self.assertEqual(stdout.getvalue().strip(), str(query_file))
 
 
 if __name__ == "__main__":

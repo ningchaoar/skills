@@ -7,6 +7,7 @@ from pathlib import Path
 
 from portfolio_math import UNKNOWN_FUND_EXPOSURE, compute_stock_exposure
 from query_state import read_latest_query
+from script_utils import merged_market
 
 
 def compute_exposure_from_query(query: dict) -> dict:
@@ -35,7 +36,7 @@ def format_exposure_markdown(exposure: dict) -> str:
         market_value = float(item.get("market_value", 0))
         weight = float(item.get("weight", 0))
         sources = item.get("sources", [])
-        market = item.get("market") or _market_from_sources(sources)
+        market = item.get("market") or merged_market(sources)
         source_types = {source.get("type") for source in sources if isinstance(source, dict)}
 
         if _is_unknown_or_unmapped(symbol, source_types):
@@ -102,19 +103,6 @@ def _source_label(source_types: set) -> str:
     if has_fund:
         return "基金穿透"
     return " + ".join(sorted(str(item) for item in source_types if item)) or "-"
-
-
-def _market_from_sources(sources: list[dict]) -> str | None:
-    markets = {
-        str(source.get("market")).strip()
-        for source in sources
-        if isinstance(source, dict) and source.get("market")
-    }
-    if not markets:
-        return None
-    if len(markets) == 1:
-        return next(iter(markets))
-    return "/".join(sorted(markets))
 
 
 def _disclosure_dates(sources: list[dict]) -> str:

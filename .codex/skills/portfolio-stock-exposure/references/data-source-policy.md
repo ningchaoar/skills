@@ -47,6 +47,8 @@ python scripts/eastmoney_interface_probe.py --fund-codes 159836 515050 --year 20
 
 该脚本会多次请求同一基金同一年份的东方财富/天天基金持仓页面，检查请求是否报错、解析出的成分股数量是否达到阈值、披露日期是否一致、前 N 个成分股代码是否一致。它是手动运行的在线探测，不应放入默认单元测试，因为网络波动或页面调整会导致结果变化。
 
+默认持仓分析流程不运行该探测脚本；只有排查数据源稳定性或维护解析逻辑时才手动运行。
+
 如果当前环境已安装 AKShare，也可以参考 AKShare 的 `fund_portfolio_hold_em` 接口口径；该接口同样来源于天天基金网“基金档案-投资组合-基金持仓”，返回指定基金和年份的持仓数据。当前技能内置脚本不强依赖 AKShare，避免额外安装依赖。
 
 ## 直接股票行情和汇率
@@ -85,7 +87,7 @@ https://api.frankfurter.app/latest?from=<currency>&to=CNY
 python scripts/market_data_probe.py --quotes CN:300750 HK:00700 US:PDD --currencies USD HKD
 ```
 
-该脚本是手动在线探测，不应放入默认单元测试。
+该脚本是手动在线探测，不应放入默认单元测试，也不参与默认持仓分析流程。
 
 ## 基金类型处理
 

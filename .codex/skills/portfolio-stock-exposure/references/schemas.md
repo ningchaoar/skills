@@ -1,6 +1,6 @@
 # 数据结构
 
-准备调用 `scripts/query_state.py`、`scripts/fund_components.py` 和 `scripts/portfolio_math.py` 时，使用以下结构。
+准备写入单一临时查询文件、运行脚本入口或调用计算函数时，使用以下结构。`scripts/query_state.py`、`scripts/portfolio_math.py` 和 `scripts/script_utils.py` 只供 import，不作为命令入口运行。
 
 ## 本次持仓输入
 
@@ -93,7 +93,7 @@
 .codex/skills/portfolio-stock-exposure/tmp/latest_query.json
 ```
 
-每次查询前覆盖旧内容。脚本默认从该文件读取输入，并把查询结果写回同一个文件。用 `write_latest_query()` 写入，避免路径和编码不一致。
+每次查询前覆盖旧内容。脚本默认从该文件读取输入，并把查询结果写回同一个文件。用 `query_state.write_latest_query()` 写入，避免路径和编码不一致；需要打印或记录路径时使用 `query_state.resolve_query_path()`，不要为了取得路径再次写文件。
 
 ```json
 {
@@ -232,7 +232,7 @@
 
 ## 东方财富接口探测输出
 
-`scripts/eastmoney_interface_probe.py` 用于手动检查公开网页端点是否仍可解析。
+`scripts/eastmoney_interface_probe.py` 用于手动检查公开网页端点是否仍可解析。它不是默认持仓分析流程的一部分。
 
 ```json
 {

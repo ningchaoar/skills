@@ -1,8 +1,10 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from fund_components import parse_eastmoney_holdings, update_latest_query_with_fund_components
+from fund_components import main, parse_eastmoney_holdings, update_latest_query_with_fund_components
 from query_state import read_latest_query, write_latest_query
 
 
@@ -150,6 +152,32 @@ class FundComponentsTests(unittest.TestCase):
         self.assertEqual(updated["fund_components"]["159836"]["components"][0]["symbol"], "300750")
         self.assertEqual(updated["fund_component_query"]["provider"], "eastmoney_tiantian_fund")
         self.assertEqual(updated["fund_component_query"]["year"], "2024")
+
+    def test_cli_with_fund_codes_writes_latest_query_once(self):
+        query_file = Path(__file__).parent / ".tmp-fund-components-cli.json"
+        self.addCleanup(lambda: query_file.unlink() if query_file.exists() else None)
+
+        with (
+            patch(
+                "fund_components.fetch_fund_components",
+                return_value={
+                    "159836": {
+                        "source": "fixture",
+                        "disclosure_date": "2024年4季度",
+                        "components": [{"symbol": "300750", "name": "宁德时代", "weight": 0.08}],
+                    }
+                },
+            ),
+            patch("fund_components.write_latest_query", wraps=write_latest_query) as write_mock,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(["--fund-codes", "159836", "--year", "2024", "--query-file", str(query_file)])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(write_mock.call_count, 1)
+        self.assertEqual(stdout.getvalue().strip(), str(query_file))
+        self.assertEqual(read_latest_query(query_file)["fund_components"]["159836"]["components"][0]["symbol"], "300750")
 
 
 if __name__ == "__main__":

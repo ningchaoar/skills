@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from query_state import read_latest_query, write_latest_query
+from query_state import DEFAULT_QUERY_FILE, read_latest_query, resolve_query_path, write_latest_query
 
 
 class QueryStateTests(unittest.TestCase):
@@ -23,6 +23,12 @@ class QueryStateTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(read_latest_query(query_file), {"fund_codes": ["515050"]})
             self.assertEqual(json.loads(query_file.read_text(encoding="utf-8")), {"fund_codes": ["515050"]})
+
+    def test_resolve_query_path_returns_default_or_custom_path(self):
+        custom_path = Path("custom-latest-query.json")
+
+        self.assertEqual(resolve_query_path(), str(DEFAULT_QUERY_FILE))
+        self.assertEqual(resolve_query_path(custom_path), str(custom_path))
 
 
 if __name__ == "__main__":
